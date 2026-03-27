@@ -1,0 +1,15 @@
+{
+  "name": "alliance-treasury-scripts",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "demo": "npx tsx demo.ts",
+    "deploy": "npx tsx deploy.ts"
+  },
+  "dependencies": {
+    "@mysten/sui": "^1.21.0",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.0"
+  }
+}

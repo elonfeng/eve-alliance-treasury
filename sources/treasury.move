@@ -1,119 +1,190 @@
-// sources/treasury.move
-module toll_gate::treasury;
+/// Alliance Treasury — core vault module.
+/// Holds SUI funds for an alliance. Funds can only be released
+/// via an approved multi-sig proposal (proposal.move calls payout).
+module alliance_treasury::treasury;
 
-use sui::object::{Self, UID};
-use sui::balance::{Self, Balance};
-use sui::coin::{Self, Coin};
-use sui::sui::SUI;
-use sui::tx_context::TxContext;
-use sui::transfer;
-use sui::event;
+use std::string::String;
+use sui::{
+    balance::{Self, Balance},
+    coin::{Self, Coin},
+    event,
+    sui::SUI,
+};
 
-// ── 类型定义 ─────────────────────────────────────────────
+// === Errors ===
+const ETreasuryFrozen:      u64 = 0;
+const EInsufficientBalance: u64 = 1;
+const EZeroAmount:          u64 = 2;
+const EWrongTreasury:       u64 = 3;
 
-/// 这里用 SUI 代币代表 LUX（演示）
-/// 真实部署中换成 LUX 的 Coin 类型
+// === Structs ===
 
-/// 金库：收集所有通行费
-public struct TollTreasury has key {
+/// Shared object — the alliance's on-chain vault.
+public struct AllianceTreasury has key {
     id: UID,
+    name: String,
     balance: Balance<SUI>,
-    total_jumps: u64,      // 累计跳跃次数（统计用）
-    toll_amount: u64,      // 当前票价（以 MIST 计，1 SUI = 10^9 MIST）
+    total_deposited: u64,
+    total_paid_out: u64,
+    frozen: bool,
 }
 
-/// OwnerCap：只有持有此对象才能提取金库资金
-public struct TreasuryOwnerCap has key, store {
+/// Owned capability — held by the deployer / admin.
+/// Required for admin-only operations (unfreeze, role management).
+public struct AdminCap has key, store {
     id: UID,
+    treasury_id: ID,
 }
 
-// ── 事件 ──────────────────────────────────────────────────
+// === Events ===
 
-public struct TollCollected has copy, drop {
-    payer: address,
+public struct TreasuryCreated has copy, drop {
+    treasury_id: ID,
+    name: String,
+    creator: address,
+}
+
+public struct Deposited has copy, drop {
+    treasury_id: ID,
+    depositor: address,
     amount: u64,
-    total_jumps: u64,
+    new_balance: u64,
 }
 
-public struct TollWithdrawn has copy, drop {
+public struct PaidOut has copy, drop {
+    treasury_id: ID,
     recipient: address,
     amount: u64,
+    proposal_id: ID,
 }
 
-// ── 初始化 ────────────────────────────────────────────────
-
-fun init(ctx: &mut TxContext) {
-    // 创建金库（共享对象，任何人可以存入）
-    let treasury = TollTreasury {
-        id: object::new(ctx),
-        balance: balance::zero(),
-        total_jumps: 0,
-        toll_amount: 50_000_000_000,  // 50 SUI（单位：MIST）
-    };
-
-    // 创建 Owner 凭证（转给部署者）
-    let owner_cap = TreasuryOwnerCap {
-        id: object::new(ctx),
-    };
-
-    transfer::share_object(treasury);
-    transfer::transfer(owner_cap, ctx.sender());
+public struct EmergencyFrozen has copy, drop {
+    treasury_id: ID,
+    frozen_by: address,
 }
 
-// ── 公开函数 ──────────────────────────────────────────────
+public struct Unfrozen has copy, drop {
+    treasury_id: ID,
+    unfrozen_by: address,
+}
 
-/// 存入通行费（由星门扩展调用）
-public fun deposit_toll(
-    treasury: &mut TollTreasury,
-    payment: Coin<SUI>,
-    payer: address,
-) {
-    let amount = coin::value(&payment);
+// === Public Entry Functions ===
 
-    // 验证金额正确
-    assert!(amount >= treasury.toll_amount, 1); // E_INSUFFICIENT_FEE
-
-    treasury.total_jumps = treasury.total_jumps + 1;
-    balance::join(&mut treasury.balance, coin::into_balance(payment));
-
-    event::emit(TollCollected {
-        payer,
-        amount,
-        total_jumps: treasury.total_jumps,
+/// Create a new AllianceTreasury. Caller receives AdminCap.
+/// Anyone can create their own treasury — one per alliance.
+public fun create_treasury(name: String, ctx: &mut TxContext) {
+    let treasury = AllianceTreasury {
+        id: object::new(ctx),
+        name,
+        balance: balance::zero<SUI>(),
+        total_deposited: 0,
+        total_paid_out: 0,
+        frozen: false,
+    };
+    let treasury_id = object::id(&treasury);
+    let admin_cap = AdminCap {
+        id: object::new(ctx),
+        treasury_id,
+    };
+    event::emit(TreasuryCreated {
+        treasury_id,
+        name: treasury.name,
+        creator: ctx.sender(),
     });
+    transfer::share_object(treasury);
+    transfer::transfer(admin_cap, ctx.sender());
 }
 
-/// 提取金库 LUX（只有持有 TreasuryOwnerCap 才能调用）
-public fun withdraw(
-    treasury: &mut TollTreasury,
-    _cap: &TreasuryOwnerCap,
-    amount: u64,
+/// Any member may deposit SUI into the treasury.
+public fun deposit(
+    treasury: &mut AllianceTreasury,
+    payment: Coin<SUI>,
     ctx: &mut TxContext,
 ) {
-    let coin = coin::take(&mut treasury.balance, amount, ctx);
-    transfer::public_transfer(coin, ctx.sender());
-
-    event::emit(TollWithdrawn {
-        recipient: ctx.sender(),
+    assert!(!treasury.frozen, ETreasuryFrozen);
+    let amount = coin::value(&payment);
+    assert!(amount > 0, EZeroAmount);
+    treasury.total_deposited = treasury.total_deposited + amount;
+    balance::join(&mut treasury.balance, coin::into_balance(payment));
+    event::emit(Deposited {
+        treasury_id: object::id(treasury),
+        depositor: ctx.sender(),
         amount,
+        new_balance: balance::value(&treasury.balance),
     });
 }
 
-/// 修改票价（Owner 调用）
-public fun set_toll_amount(
-    treasury: &mut TollTreasury,
-    _cap: &TreasuryOwnerCap,
-    new_amount: u64,
+/// Any member can trigger an emergency freeze.
+/// Stops all payouts until admin unfreezes.
+public fun emergency_freeze(treasury: &mut AllianceTreasury, ctx: &mut TxContext) {
+    treasury.frozen = true;
+    event::emit(EmergencyFrozen {
+        treasury_id: object::id(treasury),
+        frozen_by: ctx.sender(),
+    });
+}
+
+/// Only the AdminCap holder can unfreeze.
+public fun unfreeze(
+    treasury: &mut AllianceTreasury,
+    cap: &AdminCap,
+    ctx: &mut TxContext,
 ) {
-    treasury.toll_amount = new_amount;
+    assert!(cap.treasury_id == object::id(treasury), EWrongTreasury);
+    treasury.frozen = false;
+    event::emit(Unfrozen {
+        treasury_id: object::id(treasury),
+        unfrozen_by: ctx.sender(),
+    });
 }
 
-/// 读取当前票价
-public fun toll_amount(treasury: &TollTreasury): u64 {
-    treasury.toll_amount
+// === Package-internal: called by proposal.move only ===
+
+/// Transfer `amount` SUI to `recipient`. Only callable from within this package.
+/// The proposal module calls this after multi-sig threshold is met.
+public(package) fun payout(
+    treasury: &mut AllianceTreasury,
+    amount: u64,
+    recipient: address,
+    proposal_id: ID,
+    ctx: &mut TxContext,
+) {
+    assert!(!treasury.frozen, ETreasuryFrozen);
+    assert!(amount > 0, EZeroAmount);
+    assert!(balance::value(&treasury.balance) >= amount, EInsufficientBalance);
+    let coin = coin::take(&mut treasury.balance, amount, ctx);
+    transfer::public_transfer(coin, recipient);
+    treasury.total_paid_out = treasury.total_paid_out + amount;
+    event::emit(PaidOut {
+        treasury_id: object::id(treasury),
+        recipient,
+        amount,
+        proposal_id,
+    });
 }
 
-/// 读取金库余额
-public fun balance_amount(treasury: &TollTreasury): u64 {
+// === View Functions ===
+
+public fun get_balance(treasury: &AllianceTreasury): u64 {
     balance::value(&treasury.balance)
+}
+
+public fun is_frozen(treasury: &AllianceTreasury): bool {
+    treasury.frozen
+}
+
+public fun get_name(treasury: &AllianceTreasury): String {
+    treasury.name
+}
+
+public fun total_deposited(treasury: &AllianceTreasury): u64 {
+    treasury.total_deposited
+}
+
+public fun total_paid_out(treasury: &AllianceTreasury): u64 {
+    treasury.total_paid_out
+}
+
+public fun treasury_id(cap: &AdminCap): ID {
+    cap.treasury_id
 }

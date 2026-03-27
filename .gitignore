@@ -1,0 +1,9 @@
+build/
+.DS_Store
+idea_093.md
+design.md
+node_modules/
+scripts/node_modules/
+scripts/.env
+dapp/node_modules/
+dapp/dist/
