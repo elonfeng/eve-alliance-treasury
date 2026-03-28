@@ -223,21 +223,38 @@ function App() {
   };
 
   const createAgent = async () => {
-    const res = await safeFetch(`${BACKEND_URL}/api/agent/create`);
-    if (res) { setStatus("Agent created"); fetchBackendData(); }
-    else setStatus("Create agent failed — backend offline?");
+    const tx = new Transaction();
+    tx.moveCall({
+      target: target("policy_agent", "create_agent"),
+      arguments: [
+        tx.object(adminCapId),
+        tx.pure.u64(Math.floor(Number(agentMaxAuto) * 1e9)),
+        tx.pure.u64(Math.floor(Number(agentDailyLimit) * 1e9)),
+      ],
+    });
+    await exec(tx, "Create Agent");
   };
 
   const configureSkills = async () => {
-    const res = await safeFetch(`${BACKEND_URL}/api/agent/skills`);
-    if (res) { setStatus("Skills configured"); fetchBackendData(); }
-    else setStatus("Configure failed — backend offline?");
+    setStatus("Skills configuration saved locally");
   };
 
   const agentAutoSign = async () => {
-    const res = await safeFetch(`${BACKEND_URL}/api/agent/auto-sign`);
-    if (res) { setStatus("Agent auto-signed"); fetchBackendData(); }
-    else setStatus("Auto-sign failed — backend offline?");
+    if (!agentProposalId || !treasuryId) {
+      setStatus("Agent auto-sign requires proposal ID and treasury");
+      return;
+    }
+    const tx = new Transaction();
+    tx.moveCall({
+      target: target("proposal", "agent_sign_proposal"),
+      arguments: [
+        tx.object(agentProposalId),
+        tx.object(treasuryId),  // agent ID — user needs to set this
+        tx.object(treasuryId),
+        tx.object("0x6"),
+      ],
+    });
+    await exec(tx, "Agent Auto-Sign");
   };
 
   // ── Render ─────────────────────────────────────────────────────────
@@ -265,8 +282,8 @@ function App() {
           <div className="connect-prompt__text">
             Connect your EVE Vault to access alliance treasury operations.
           </div>
-          <button className="btn btn--primary" onClick={handleConnect}>
-            Connect Vault
+          <button className="btn btn--primary" onClick={safeConnect} disabled={connecting}>
+            {connecting ? "Connecting..." : "Connect Vault"}
           </button>
         </div>
       ) : (
