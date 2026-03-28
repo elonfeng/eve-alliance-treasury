@@ -20,6 +20,7 @@ use sui::{
 use alliance_treasury::{
     roles::{Self, RoleRegistry},
     treasury::{Self, AllianceTreasury},
+    policy_agent::{Self, PolicyAgent},
 };
 
 // === Constants ===
@@ -88,6 +89,13 @@ public struct ProposalExecuted has copy, drop {
     executor: address,
     recipient: address,
     amount: u64,
+}
+
+public struct AgentAutoSigned has copy, drop {
+    proposal_id: ID,
+    agent_id: ID,
+    signature_count: u64,
+    required_count: u64,
 }
 
 public struct ProposalMarkedExpired has copy, drop {
@@ -168,6 +176,43 @@ public fun sign_proposal(
     event::emit(ProposalSigned {
         proposal_id: object::id(proposal),
         signer: ctx.sender(),
+        signature_count: proposal.signature_count,
+        required_count: proposal.required_count,
+    });
+}
+
+/// Policy Agent evaluates and auto-signs a proposal.
+/// The agent's signature counts as one vote toward the multi-sig threshold.
+/// Agent uses a deterministic address (0xAGENT) so it never collides with real signers.
+public fun agent_sign_proposal(
+    proposal: &mut BudgetProposal,
+    agent: &mut PolicyAgent,
+    treasury: &AllianceTreasury,
+    clock: &Clock,
+) {
+    assert!(proposal.status == ProposalStatus::Pending, ENotPending);
+    assert!(clock::timestamp_ms(clock) <= proposal.expires_at, EProposalExpired);
+
+    // Use agent's object ID as its "signer address" — guaranteed unique
+    let agent_addr = object::id_address(agent);
+    assert!(!table::contains(&proposal.signatures, agent_addr), EAlreadySigned);
+
+    // Evaluate via policy agent skills — aborts if any check fails
+    policy_agent::auto_sign_proposal(
+        agent,
+        treasury,
+        proposal.amount,
+        proposal.recipient,
+        clock,
+    );
+
+    // Agent signature counts toward threshold
+    table::add(&mut proposal.signatures, agent_addr, true);
+    proposal.signature_count = proposal.signature_count + 1;
+
+    event::emit(AgentAutoSigned {
+        proposal_id: object::id(proposal),
+        agent_id: object::id(agent),
         signature_count: proposal.signature_count,
         required_count: proposal.required_count,
     });
