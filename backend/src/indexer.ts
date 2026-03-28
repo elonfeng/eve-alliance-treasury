@@ -140,8 +140,10 @@ function processKillmail(evt: KillmailCreatedEvent): void {
 
 function processJump(evt: JumpEventData, timestamp: string): void {
   const db = getDb();
+  // Some JumpEvents may have null fields — skip them
+  if (!evt.source_gate_id || !evt.dest_gate_id || !evt.character_id) return;
   db.prepare(
-    `INSERT INTO jumps (source_gate_id, dest_gate_id, character_id, timestamp)
+    `INSERT OR IGNORE INTO jumps (source_gate_id, dest_gate_id, character_id, timestamp)
      VALUES (?, ?, ?, ?)`
   ).run(
     evt.source_gate_id,
