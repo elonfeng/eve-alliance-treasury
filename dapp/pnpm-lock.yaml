@@ -23,6 +23,9 @@ importers:
       '@mysten/sui':
         specifier: 2.6.0
         version: 2.6.0(typescript@5.9.3)
+      '@mysten/wallet-standard':
+        specifier: ^0.20.1
+        version: 0.20.1(@mysten/sui@2.6.0(typescript@5.9.3))
       '@radix-ui/colors':
         specifier: ^3.0.0
         version: 3.0.0

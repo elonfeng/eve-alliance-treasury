@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useConnection } from "@evefrontier/dapp-kit";
-import { useCurrentAccount, useWallets } from "@mysten/dapp-kit-react";
+import { useCurrentAccount } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
 import { bcs } from "@mysten/sui/bcs";
+import { getWallets } from "@mysten/wallet-standard";
 
 import { HudBar } from "./components/HudBar";
 import { SetupTab } from "./components/SetupTab";
@@ -28,7 +29,6 @@ const TABS: { id: Tab; label: string }[] = [
 
 function App() {
   const { handleConnect, handleDisconnect } = useConnection();
-  const wallets = useWallets();
   const account = useCurrentAccount();
 
   const [activeTab, setActiveTab] = useState<Tab>("setup");
@@ -118,8 +118,9 @@ function App() {
     setStatus(`${label}...`);
     try {
       if (!account) throw new Error("Wallet not connected");
-      // Find the connected wallet via wallet-standard (bypass dapp-kit wrapper)
-      const wallet = wallets.find((w: any) => w.name === "Eve Vault") || wallets[0];
+      // Get RAW wallet from wallet-standard registry (not dapp-kit wrapped)
+      const rawWallets = getWallets().get();
+      const wallet = rawWallets.find((w: any) => w.name === "Eve Vault") || rawWallets[0];
       if (!wallet) throw new Error("No wallet found");
       const features = wallet.features as any;
       let result: any;
