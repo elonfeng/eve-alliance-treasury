@@ -207,8 +207,80 @@ async function main() {
     }
   }
 
-  // ── Step 7: Create Whitelist ─────────────────────────────────────────
-  console.log("═══ Step 7: Create Gate Whitelist ═══");
+  // ── Step 7: Create Policy Agent ──────────────────────────────────────
+  console.log("═══ Step 7: Create Policy Agent ═══");
+  const tx7a = new Transaction();
+  tx7a.moveCall({
+    target: target("policy_agent", "create_agent"),
+    arguments: [
+      tx7a.object(adminCapId!),
+      tx7a.pure.u64(80_000_000_000),   // max_auto_amount: 80 SUI
+      tx7a.pure.u64(200_000_000_000),  // daily_limit: 200 SUI
+    ],
+  });
+  const res7a = await signAndExecute(tx7a, keypair);
+  const agentId = findCreatedObject(res7a, "PolicyAgent");
+  console.log(`  ✅ Policy Agent: ${agentId}`);
+  console.log(`  📝 Max auto-sign: 80 SUI`);
+  console.log(`  📝 Daily limit: 200 SUI`);
+  console.log(`  📝 Skills: AUTO_APPROVE + RATE_LIMIT (default)\n`);
+
+  // ── Step 8: Agent Auto-Signs a New Proposal ────────────────────────
+  console.log("═══ Step 8: Agent Auto-Signs Proposal ═══");
+  // Create a new small proposal for the agent to sign
+  const agentProposalAmount = 30_000_000; // 0.03 SUI — within agent's 80 SUI limit
+  const tx8a = new Transaction();
+  tx8a.moveCall({
+    target: target("proposal", "create_proposal"),
+    arguments: [
+      tx8a.object(treasuryId!),
+      tx8a.object(registryId!),
+      tx8a.pure.u64(agentProposalAmount),
+      tx8a.pure.address(address),
+      tx8a.pure.string("Agent-approved: routine supply restock"),
+      tx8a.object("0x6"),
+    ],
+  });
+  const res8a = await signAndExecute(tx8a, keypair);
+  const agentProposalId = findCreatedObject(res8a, "BudgetProposal");
+  console.log(`  ✅ New proposal: ${agentProposalId}`);
+  console.log(`  📝 Amount: ${agentProposalAmount / 1e9} SUI (within agent limit)`);
+  console.log(`  📝 Proposer auto-signed (1/2)\n`);
+
+  // Agent auto-signs — should reach threshold (2/2)
+  console.log("  🤖 Policy Agent evaluating proposal...");
+  const tx8b = new Transaction();
+  tx8b.moveCall({
+    target: target("proposal", "agent_sign_proposal"),
+    arguments: [
+      tx8b.object(agentProposalId!),
+      tx8b.object(agentId!),
+      tx8b.object(treasuryId!),
+      tx8b.object("0x6"),
+    ],
+  });
+  await signAndExecute(tx8b, keypair);
+  console.log("  ✅ Agent auto-signed! (2/2 threshold met)");
+  console.log("  📝 No human needed — agent approved based on configured rules\n");
+
+  // ── Step 9: Execute Agent-Approved Proposal ────────────────────────
+  console.log("═══ Step 9: Execute Agent-Approved Proposal ═══");
+  const tx9 = new Transaction();
+  tx9.moveCall({
+    target: target("proposal", "execute_proposal"),
+    arguments: [
+      tx9.object(agentProposalId!),
+      tx9.object(treasuryId!),
+      tx9.object(registryId!),
+      tx9.object("0x6"),
+    ],
+  });
+  await signAndExecute(tx9, keypair);
+  console.log("  ✅ Proposal executed! Funds transferred automatically.");
+  console.log("  📝 Full flow: human proposes → agent approves → auto-execute\n");
+
+  // ── Step 10: Create Whitelist ─────────────────────────────────────
+  console.log("═══ Step 10: Create Gate Whitelist ═══");
   const tx7 = new Transaction();
   tx7.moveCall({
     target: target("gate_sync", "create_whitelist"),
@@ -218,8 +290,8 @@ async function main() {
   const whitelistId = findCreatedObject(res7, "MemberWhitelist");
   console.log(`  ✅ Whitelist: ${whitelistId}\n`);
 
-  // ── Step 8: Whitelist a Member ───────────────────────────────────────
-  console.log("═══ Step 8: Whitelist Member for Gate Access ═══");
+  // ── Step 11: Whitelist a Member ──────────────────────────────────────
+  console.log("═══ Step 11: Whitelist Member for Gate Access ═══");
   const tx8 = new Transaction();
   tx8.moveCall({
     target: target("gate_sync", "whitelist_member"),
@@ -240,8 +312,10 @@ async function main() {
   console.log(`  TREASURY_ID=${treasuryId}`);
   console.log(`  ADMIN_CAP_ID=${adminCapId}`);
   console.log(`  REGISTRY_ID=${registryId}`);
+  console.log(`  AGENT_ID=${agentId}`);
   console.log(`  WHITELIST_ID=${whitelistId}`);
   console.log(`  PROPOSAL_ID=${proposalId}`);
+  console.log(`  AGENT_PROPOSAL_ID=${agentProposalId}`);
   console.log("═══════════════════════════════════════════════\n");
 }
 
