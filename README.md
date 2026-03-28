@@ -189,7 +189,7 @@ These events flow into SQLite and are served via REST endpoints (`/api/killmails
 
 | Item | Address |
 |------|---------|
-| Package ID | `0xbeffbe08c1a7b0ec9a108773707c8a2b6032cbf1b5d170188d646121f2ac24f3` |
+| Package ID | `0x2be233510be68984d0f99d3095ad2e63507e5ed41335f60e5b9877aa8de431f5` |
 
 > Note: The package will be redeployed with the `policy_agent` module included. The address above reflects the pre-agent deployment.
 
