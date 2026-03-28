@@ -2,6 +2,8 @@ interface SetupTabProps {
   treasuryId: string;
   adminCapId: string;
   registryId: string;
+  memberAdded: boolean;
+  deposited: boolean;
   allianceName: string;
   setAllianceName: (v: string) => void;
   memberAddr: string;
@@ -28,7 +30,9 @@ export function SetupTab(props: SetupTabProps) {
   const step =
     !props.treasuryId ? 0 :
     !props.registryId ? 1 :
-    2; // members + deposit always available after registry
+    !props.memberAdded ? 2 :
+    !props.deposited ? 3 :
+    4;
 
   const steps = ["Treasury", "Registry", "Members", "Deposit"];
 

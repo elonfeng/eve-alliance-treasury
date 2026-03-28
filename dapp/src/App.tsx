@@ -40,6 +40,8 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>("setup");
   const [status, setStatus] = useState("");
   const [lastTxDigest, setLastTxDigest] = useState("");
+  const [memberAdded, setMemberAdded] = useState(false);
+  const [deposited, setDeposited] = useState(false);
 
   // Object IDs
   const [treasuryId, setTreasuryId] = useState("");
@@ -123,9 +125,44 @@ function App() {
   const exec = async (tx: Transaction, label: string) => {
     setStatus(`${label}...`);
     try {
-      const result: any = await signAndExecuteTransaction({ transaction: tx });
-      setLastTxDigest(result?.digest || "");
-      setStatus(`${label} succeeded`);
+      const rawResult: any = await signAndExecuteTransaction({ transaction: tx });
+      console.log(`${label} raw result:`, JSON.stringify(rawResult));
+      // EVE Vault returns { $kind: "Transaction", Transaction: { digest, signatures } }
+      const digest = rawResult?.digest || rawResult?.Transaction?.digest || "";
+      setLastTxDigest(digest);
+      const result = rawResult?.objectChanges ? rawResult : {};
+
+      // If wallet returned objectChanges, use them directly
+      if (result?.objectChanges) {
+        setStatus(`${label} succeeded`);
+        return result;
+      }
+
+      // Otherwise fetch tx details from RPC using digest (with retry)
+      if (digest) {
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 2000));
+          try {
+            const rpcRes = await fetch("https://fullnode.testnet.sui.io:443", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                jsonrpc: "2.0", id: 1,
+                method: "sui_getTransactionBlock",
+                params: [digest, { showObjectChanges: true, showEffects: true }],
+              }),
+            });
+            const rpcData = await rpcRes.json();
+            const txResult = rpcData?.result;
+            if (txResult?.objectChanges) {
+              setStatus(`${label} succeeded`);
+              return { ...result, objectChanges: txResult.objectChanges };
+            }
+          } catch { /* retry */ }
+        }
+      }
+
+      setStatus(`${label} succeeded (tx: ${digest.slice(0, 12)}...)`);
       return result;
     } catch (e: any) {
       const msg = e?.message || String(e);
@@ -169,7 +206,8 @@ function App() {
       target: target("roles", "add_member"),
       arguments: [tx.object(registryId), tx.object(adminCapId), tx.pure.address(memberAddr), tx.pure.u8(Number(memberRole))],
     });
-    await exec(tx, "Add Member");
+    const res = await exec(tx, "Add Member");
+    if (res) setMemberAdded(true);
   };
 
   const deposit = async () => {
@@ -177,7 +215,8 @@ function App() {
     const tx = new Transaction();
     const [coin] = tx.splitCoins(tx.gas, [amountMist]);
     tx.moveCall({ target: target("treasury", "deposit"), arguments: [tx.object(treasuryId), coin] });
-    await exec(tx, "Deposit");
+    const res = await exec(tx, "Deposit");
+    if (res) setDeposited(true);
   };
 
   const createProposal = async () => {
@@ -303,6 +342,7 @@ function App() {
           {activeTab === "setup" && (
             <SetupTab
               treasuryId={treasuryId} adminCapId={adminCapId} registryId={registryId}
+              memberAdded={memberAdded} deposited={deposited}
               allianceName={allianceName} setAllianceName={setAllianceName}
               memberAddr={memberAddr} setMemberAddr={setMemberAddr}
               memberRole={memberRole} setMemberRole={setMemberRole}
