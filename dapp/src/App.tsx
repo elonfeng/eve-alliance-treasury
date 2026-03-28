@@ -94,10 +94,10 @@ function App() {
     ]);
     const online = propData !== null || auditData !== null || statsData !== null;
     setBackendOnline(online);
-    if (propData) setProposals(propData);
-    if (auditData) setAuditLog(auditData);
+    if (propData) setProposals(propData.data || propData);
+    if (auditData) setAuditLog(auditData.data || auditData);
     if (statsData) setAgentStats(statsData);
-    if (kmData) setKillMails(kmData);
+    if (kmData) setKillMails(kmData.data || kmData);
     setBackendLoading(false);
   }, [safeFetch]);
 
