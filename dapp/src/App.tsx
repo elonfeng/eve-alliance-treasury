@@ -1,13 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Box, Flex, Heading, Button, Text, Card, TextField,
-  Badge, Separator, Callout, DataList, Grid,
+  Badge, Separator, Callout, DataList, Grid, Table, Switch,
+  Spinner,
 } from "@radix-ui/themes";
 import { abbreviateAddress, useConnection } from "@evefrontier/dapp-kit";
 import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
 
 const PACKAGE_ID = import.meta.env.VITE_PACKAGE_ID || "0x0";
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
 
 function target(module: string, fn: string): `${string}::${string}::${string}` {
   return `${PACKAGE_ID}::${module}::${fn}`;
@@ -35,6 +37,136 @@ function App() {
 
   const [status, setStatus] = useState("");
   const [lastTxDigest, setLastTxDigest] = useState("");
+
+  // ── Backend API state ──────────────────────────────────────────────
+  interface BackendProposal {
+    id: string;
+    purpose: string;
+    amount: number;
+    status: string;
+    created_at: string;
+  }
+  interface AuditEntry {
+    action: string;
+    actor: string;
+    timestamp: string;
+    details: string;
+  }
+  interface AgentStats {
+    total_auto_signed: number;
+    daily_spent: number;
+    daily_limit: number;
+    max_auto_amount: number;
+    skills: string[];
+  }
+  interface KillMail {
+    killer: string;
+    victim: string;
+    timestamp: string;
+  }
+
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
+  const [proposals, setProposals] = useState<BackendProposal[]>([]);
+  const [auditLog, setAuditLog] = useState<AuditEntry[]>([]);
+  const [agentStats, setAgentStats] = useState<AgentStats | null>(null);
+  const [killMails, setKillMails] = useState<KillMail[]>([]);
+  const [backendLoading, setBackendLoading] = useState(false);
+
+  // Agent controls state
+  const [agentMaxAuto, setAgentMaxAuto] = useState("100");
+  const [agentDailyLimit, setAgentDailyLimit] = useState("500");
+  const [agentProposalId, setAgentProposalId] = useState("");
+  const [agentSkills, setAgentSkills] = useState<Record<string, boolean>>({
+    auto_sign: false,
+    risk_check: false,
+    rate_limit: false,
+    killmail_watch: false,
+  });
+
+  const safeFetch = useCallback(async (url: string) => {
+    try {
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const fetchBackendData = useCallback(async () => {
+    setBackendLoading(true);
+    const [propData, auditData, statsData, kmData] = await Promise.all([
+      safeFetch(`${BACKEND_URL}/api/proposals?limit=5`),
+      safeFetch(`${BACKEND_URL}/api/audit?limit=5`),
+      safeFetch(`${BACKEND_URL}/api/agent/stats`),
+      safeFetch(`${BACKEND_URL}/api/killmails?limit=10`),
+    ]);
+    const online = propData !== null || auditData !== null || statsData !== null;
+    setBackendOnline(online);
+    if (propData) setProposals(propData);
+    if (auditData) setAuditLog(auditData);
+    if (statsData) setAgentStats(statsData);
+    if (kmData) setKillMails(kmData);
+    setBackendLoading(false);
+  }, [safeFetch]);
+
+  useEffect(() => {
+    fetchBackendData();
+  }, [fetchBackendData]);
+
+  const createAgent = async () => {
+    setStatus("Creating agent...");
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/agent/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          max_auto_amount: Number(agentMaxAuto),
+          daily_limit: Number(agentDailyLimit),
+        }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus("Agent created");
+      fetchBackendData();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      setStatus(`Create agent failed: ${msg}`);
+    }
+  };
+
+  const configureSkills = async () => {
+    setStatus("Configuring agent skills...");
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/agent/skills`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skills: agentSkills }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus("Agent skills configured");
+      fetchBackendData();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      setStatus(`Configure skills failed: ${msg}`);
+    }
+  };
+
+  const agentAutoSign = async () => {
+    setStatus("Agent auto-signing proposal...");
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/agent/auto-sign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ proposal_id: agentProposalId }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setStatus("Agent auto-sign succeeded");
+      fetchBackendData();
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Unknown error";
+      setStatus(`Agent auto-sign failed: ${msg}`);
+    }
+  };
 
   const exec = async (tx: Transaction, label: string) => {
     setStatus(`${label}...`);
@@ -409,6 +541,109 @@ function App() {
                 Freeze Treasury
               </Button>
             </Card>
+
+            <Separator size="4" />
+
+            {/* Policy Agent Controls */}
+            <Card>
+              <Heading size="3" mb="3">
+                Policy Agent
+              </Heading>
+
+              {/* Create Agent */}
+              <Text size="2" weight="bold" mb="1" as="p">
+                Create Agent
+              </Text>
+              <Flex direction="column" gap="2" mb="3">
+                <TextField.Root
+                  placeholder="Max auto-sign amount (SUI)"
+                  value={agentMaxAuto}
+                  onChange={(e) => setAgentMaxAuto(e.target.value)}
+                />
+                <TextField.Root
+                  placeholder="Daily limit (SUI)"
+                  value={agentDailyLimit}
+                  onChange={(e) => setAgentDailyLimit(e.target.value)}
+                />
+                <Button onClick={createAgent} variant="soft">
+                  Create Agent
+                </Button>
+              </Flex>
+
+              <Separator size="4" mb="3" />
+
+              {/* Configure Skills */}
+              <Text size="2" weight="bold" mb="1" as="p">
+                Agent Skills
+              </Text>
+              <Flex direction="column" gap="2" mb="3">
+                {Object.keys(agentSkills).map((skill) => (
+                  <Flex key={skill} align="center" gap="2">
+                    <Switch
+                      checked={agentSkills[skill]}
+                      onCheckedChange={(checked: boolean) =>
+                        setAgentSkills((prev) => ({
+                          ...prev,
+                          [skill]: checked,
+                        }))
+                      }
+                      size="1"
+                    />
+                    <Text size="2">{skill.replace(/_/g, " ")}</Text>
+                  </Flex>
+                ))}
+                <Button onClick={configureSkills} variant="soft" size="1">
+                  Save Skills
+                </Button>
+              </Flex>
+
+              <Separator size="4" mb="3" />
+
+              {/* Auto-sign */}
+              <Text size="2" weight="bold" mb="1" as="p">
+                Agent Auto-Sign
+              </Text>
+              <Flex gap="2" align="center" mb="3">
+                <TextField.Root
+                  placeholder="Proposal ID (0x...)"
+                  value={agentProposalId}
+                  onChange={(e) => setAgentProposalId(e.target.value)}
+                  style={{ flex: 1 }}
+                />
+                <Button
+                  onClick={agentAutoSign}
+                  disabled={!agentProposalId}
+                  variant="soft"
+                  size="1"
+                >
+                  Auto-Sign
+                </Button>
+              </Flex>
+
+              {/* Agent Stats */}
+              {agentStats && (
+                <>
+                  <Separator size="4" mb="3" />
+                  <Text size="2" weight="bold" mb="1" as="p">
+                    Agent Stats
+                  </Text>
+                  <DataList.Root size="1">
+                    <DataList.Item>
+                      <DataList.Label>Total Auto-Signed</DataList.Label>
+                      <DataList.Value>
+                        {agentStats.total_auto_signed}
+                      </DataList.Value>
+                    </DataList.Item>
+                    <DataList.Item>
+                      <DataList.Label>Daily Spent</DataList.Label>
+                      <DataList.Value>
+                        {agentStats.daily_spent} / {agentStats.daily_limit} SUI
+                      </DataList.Value>
+                    </DataList.Item>
+                  </DataList.Root>
+                </>
+              )}
+            </Card>
           </Flex>
         </Grid>
       )}
@@ -425,6 +660,163 @@ function App() {
           </a>
         </Text>
       )}
+
+      {/* ─── Backend API Integration ─── */}
+      <Separator size="4" my="5" />
+
+      <Flex justify="between" align="center" mb="3">
+        <Heading size="5">Backend Dashboard</Heading>
+        <Flex align="center" gap="2">
+          {backendLoading && <Spinner size="1" />}
+          <Badge color={backendOnline ? "green" : "red"} variant="soft">
+            {backendOnline === null
+              ? "Checking..."
+              : backendOnline
+                ? "Backend Online"
+                : "Backend Offline"}
+          </Badge>
+          <Button variant="ghost" size="1" onClick={fetchBackendData}>
+            Refresh
+          </Button>
+        </Flex>
+      </Flex>
+
+      {backendOnline === false && (
+        <Callout.Root color="orange" mb="4" size="1">
+          <Callout.Text>
+            Backend is offline. Data below may be stale. Make sure the server is
+            running at {BACKEND_URL}.
+          </Callout.Text>
+        </Callout.Root>
+      )}
+
+      <Grid columns="2" gap="4" mb="4">
+        {/* Recent Proposals */}
+        <Card>
+          <Heading size="3" mb="3">
+            Recent Proposals
+          </Heading>
+          {proposals.length === 0 ? (
+            <Text size="2" color="gray">
+              No proposals found.
+            </Text>
+          ) : (
+            <Table.Root size="1">
+              <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeaderCell>ID</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Purpose</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Amount</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {proposals.map((p) => (
+                  <Table.Row key={p.id}>
+                    <Table.Cell>
+                      <Text size="1">{p.id.slice(0, 8)}...</Text>
+                    </Table.Cell>
+                    <Table.Cell>{p.purpose}</Table.Cell>
+                    <Table.Cell>{p.amount}</Table.Cell>
+                    <Table.Cell>
+                      <Badge
+                        color={
+                          p.status === "executed"
+                            ? "green"
+                            : p.status === "pending"
+                              ? "yellow"
+                              : "gray"
+                        }
+                        size="1"
+                      >
+                        {p.status}
+                      </Badge>
+                    </Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Table.Root>
+          )}
+        </Card>
+
+        {/* Audit Log */}
+        <Card>
+          <Heading size="3" mb="3">
+            Audit Log
+          </Heading>
+          {auditLog.length === 0 ? (
+            <Text size="2" color="gray">
+              No audit entries found.
+            </Text>
+          ) : (
+            <Table.Root size="1">
+              <Table.Header>
+                <Table.Row>
+                  <Table.ColumnHeaderCell>Action</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Actor</Table.ColumnHeaderCell>
+                  <Table.ColumnHeaderCell>Time</Table.ColumnHeaderCell>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {auditLog.map((entry, i) => (
+                  <Table.Row key={i}>
+                    <Table.Cell>
+                      <Badge variant="soft" size="1">
+                        {entry.action}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text size="1">
+                        {entry.actor.slice(0, 8)}...
+                      </Text>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Text size="1">{entry.timestamp}</Text>
+                    </Table.Cell>
+                  </Table.Row>
+                ))}
+              </Table.Body>
+            </Table.Root>
+          )}
+        </Card>
+      </Grid>
+
+      {/* ─── KillMail Feed ─── */}
+      <Card mb="4">
+        <Heading size="3" mb="3">
+          KillMail Feed
+        </Heading>
+        {killMails.length === 0 ? (
+          <Text size="2" color="gray">
+            No killmails found.
+          </Text>
+        ) : (
+          <Table.Root size="1">
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>Killer</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Victim</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Timestamp</Table.ColumnHeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {killMails.map((km, i) => (
+                <Table.Row key={i}>
+                  <Table.Cell>
+                    <Text size="1">{km.killer}</Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text size="1">{km.victim}</Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Text size="1">{km.timestamp}</Text>
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Root>
+        )}
+      </Card>
     </Box>
   );
 }
