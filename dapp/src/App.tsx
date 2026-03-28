@@ -29,6 +29,13 @@ function App() {
   const { handleConnect, handleDisconnect } = useConnection();
   const { signAndExecuteTransaction } = useDAppKit();
   const account = useCurrentAccount();
+  const [connecting, setConnecting] = useState(false);
+
+  const safeConnect = async () => {
+    if (connecting || account) return;
+    setConnecting(true);
+    try { await handleConnect(); } finally { setConnecting(false); }
+  };
 
   const [activeTab, setActiveTab] = useState<Tab>("setup");
   const [status, setStatus] = useState("");
