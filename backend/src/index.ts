@@ -31,3 +31,5 @@ startIndexer();
 app.listen(config.port, () => {
   console.log(`[server] Alliance Treasury API running on http://localhost:${config.port}`);
 });
+
+export { app };

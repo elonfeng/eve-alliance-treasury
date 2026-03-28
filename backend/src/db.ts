@@ -5,19 +5,27 @@ const DB_PATH = path.resolve(__dirname, "..", "data", "treasury.db");
 
 let db: Database.Database;
 
-export function getDb(): Database.Database {
-  if (!db) {
-    // Ensure data directory exists
+export function initDb(dbPath?: string): Database.Database {
+  const resolvedPath = dbPath ?? DB_PATH;
+
+  if (resolvedPath !== ":memory:") {
     const fs = require("fs");
-    const dir = path.dirname(DB_PATH);
+    const dir = path.dirname(resolvedPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
     }
+  }
 
-    db = new Database(DB_PATH);
-    db.pragma("journal_mode = WAL");
-    db.pragma("foreign_keys = ON");
-    initTables(db);
+  db = new Database(resolvedPath);
+  db.pragma("journal_mode = WAL");
+  db.pragma("foreign_keys = ON");
+  initTables(db);
+  return db;
+}
+
+export function getDb(): Database.Database {
+  if (!db) {
+    initDb();
   }
   return db;
 }
