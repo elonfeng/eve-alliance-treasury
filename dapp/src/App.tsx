@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useConnection } from "@evefrontier/dapp-kit";
 import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
+import { bcs } from "@mysten/sui/bcs";
 
 import { HudBar } from "./components/HudBar";
 import { SetupTab } from "./components/SetupTab";
@@ -133,7 +134,7 @@ function App() {
 
   const createTreasury = async () => {
     const tx = new Transaction();
-    tx.moveCall({ target: target("treasury", "create_treasury"), arguments: [tx.pure.string(allianceName)] });
+    tx.moveCall({ target: target("treasury", "create_treasury"), arguments: [tx.pure(bcs.string().serialize(allianceName).toBytes())] });
     const res: any = await exec(tx, "Create Treasury");
     if (res?.objectChanges) {
       const t = res.objectChanges.find((c: any) => c.type === "created" && c.objectType?.includes("AllianceTreasury"));
@@ -161,7 +162,7 @@ function App() {
     const tx = new Transaction();
     tx.moveCall({
       target: target("roles", "add_member"),
-      arguments: [tx.object(registryId), tx.object(adminCapId), tx.pure.address(memberAddr), tx.pure.u8(Number(memberRole))],
+      arguments: [tx.object(registryId), tx.object(adminCapId), tx.pure(bcs.Address.serialize(memberAddr).toBytes()), tx.pure(bcs.u8().serialize(Number(memberRole)).toBytes())],
     });
     await exec(tx, "Add Member");
   };
@@ -180,9 +181,9 @@ function App() {
     tx.moveCall({
       target: target("proposal", "create_proposal"),
       arguments: [
-        tx.object(treasuryId), tx.object(registryId), tx.pure.u64(amountMist),
-        tx.pure.address(proposalRecipient || account!.address),
-        tx.pure.string(proposalPurpose), tx.object("0x6"),
+        tx.object(treasuryId), tx.object(registryId), tx.pure(bcs.u64().serialize(amountMist).toBytes()),
+        tx.pure(bcs.Address.serialize(proposalRecipient || account!.address).toBytes()),
+        tx.pure(bcs.string().serialize(proposalPurpose).toBytes()), tx.object("0x6"),
       ],
     });
     const res: any = await exec(tx, "Create Proposal");
