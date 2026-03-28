@@ -1,9 +1,9 @@
 interface AgentStats {
-  total_auto_signed: number;
-  daily_spent: number;
-  daily_limit: number;
-  max_auto_amount: number;
-  skills: string[];
+  proposals: number;
+  payouts: number;
+  signatures: number;
+  killmails: number;
+  jumps: number;
 }
 
 interface AgentTabProps {
@@ -124,20 +124,24 @@ export function AgentTab(props: AgentTabProps) {
             <table className="data-table">
               <tbody>
                 <tr>
-                  <td style={{ color: 'var(--text-muted)' }}>Total Auto-Signed</td>
+                  <td style={{ color: 'var(--text-muted)' }}>Proposals Indexed</td>
                   <td style={{ textAlign: 'right' }}>
-                    <span className="tag tag--cyan">{props.agentStats.total_auto_signed}</span>
+                    <span className="tag tag--cyan">{props.agentStats.proposals}</span>
                   </td>
                 </tr>
                 <tr>
-                  <td style={{ color: 'var(--text-muted)' }}>Daily Spent / Limit</td>
+                  <td style={{ color: 'var(--text-muted)' }}>Payouts Executed</td>
                   <td style={{ textAlign: 'right' }}>
-                    {props.agentStats.daily_spent} / {props.agentStats.daily_limit} SUI
+                    <span className="tag tag--green">{props.agentStats.payouts}</span>
                   </td>
                 </tr>
                 <tr>
-                  <td style={{ color: 'var(--text-muted)' }}>Max Auto Amount</td>
-                  <td style={{ textAlign: 'right' }}>{props.agentStats.max_auto_amount} SUI</td>
+                  <td style={{ color: 'var(--text-muted)' }}>Signatures</td>
+                  <td style={{ textAlign: 'right' }}>{props.agentStats.signatures}</td>
+                </tr>
+                <tr>
+                  <td style={{ color: 'var(--text-muted)' }}>KillMails / Jumps</td>
+                  <td style={{ textAlign: 'right' }}>{props.agentStats.killmails} / {props.agentStats.jumps}</td>
                 </tr>
               </tbody>
             </table>

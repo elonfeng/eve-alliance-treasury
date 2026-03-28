@@ -1,7 +1,7 @@
 interface BackendProposal {
   id: string;
   purpose: string;
-  amount: number;
+  amount: string;
   status: string;
   created_at: string;
 }
@@ -17,9 +17,10 @@ interface AuditEntry {
 }
 
 interface KillMail {
-  killer: string;
-  victim: string;
-  timestamp: string;
+  killer_id: string;
+  victim_id: string;
+  loss_type: string;
+  kill_timestamp: string;
 }
 
 interface IntelTabProps {
@@ -79,7 +80,7 @@ export function IntelTab(props: IntelTabProps) {
                   <tr key={p.id}>
                     <td style={{ fontFamily: 'var(--font-body)', fontSize: '11px' }}>{p.id.slice(0, 8)}...</td>
                     <td>{p.purpose}</td>
-                    <td>{p.amount}</td>
+                    <td>{(Number(p.amount) / 1e9).toFixed(3)} SUI</td>
                     <td>{statusTag(p.status)}</td>
                   </tr>
                 ))}
@@ -135,9 +136,9 @@ export function IntelTab(props: IntelTabProps) {
             <tbody>
               {props.killMails.map((km, i) => (
                 <tr key={i}>
-                  <td style={{ fontSize: '11px' }}>{km.killer}</td>
-                  <td style={{ fontSize: '11px' }}>{km.victim}</td>
-                  <td style={{ fontSize: '11px' }}>{km.timestamp}</td>
+                  <td style={{ fontSize: '11px' }}>{km.killer_id?.slice(0, 10) || '—'}...</td>
+                  <td style={{ fontSize: '11px' }}>{km.victim_id?.slice(0, 10) || '—'}...</td>
+                  <td style={{ fontSize: '11px' }}>{km.kill_timestamp?.slice(0, 10) || '—'}</td>
                 </tr>
               ))}
             </tbody>

@@ -62,10 +62,10 @@ function App() {
   });
 
   // Backend state
-  interface BackendProposal { id: string; purpose: string; amount: number; status: string; created_at: string; }
+  interface BackendProposal { id: string; purpose: string; amount: string; status: string; created_at: string; }
   interface AuditEntry { proposal_id: string; purpose: string; proposer: string; recipient: string; amount: string; executor: string; executed_at: string; }
-  interface AgentStats { total_auto_signed: number; daily_spent: number; daily_limit: number; max_auto_amount: number; skills: string[]; }
-  interface KillMail { killer: string; victim: string; timestamp: string; }
+  interface AgentStats { proposals: number; payouts: number; signatures: number; killmails: number; jumps: number; }
+  interface KillMail { killer_id: string; victim_id: string; loss_type: string; kill_timestamp: string; }
 
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
   const [proposals, setProposals] = useState<BackendProposal[]>([]);
