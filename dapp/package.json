@@ -23,7 +23,7 @@
   },
   "pnpm": {
     "overrides": {
-      "@mysten/sui": "2.4.0"
+      "@mysten/sui": "2.5.0"
     }
   },
   "devDependencies": {
