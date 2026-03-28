@@ -1,7 +1,9 @@
 import Database from "better-sqlite3";
 import path from "path";
 
-const DB_PATH = path.resolve(__dirname, "..", "data", "treasury.db");
+const DB_PATH = process.env.RENDER
+  ? "/opt/render/project/src/data/treasury.db"
+  : path.resolve(__dirname, "..", "data", "treasury.db");
 
 let db: Database.Database;
 

@@ -7,3 +7,4 @@ scripts/node_modules/
 scripts/.env
 dapp/node_modules/
 dapp/dist/
+.idea/

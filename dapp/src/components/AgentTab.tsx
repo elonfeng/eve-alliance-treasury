@@ -142,7 +142,7 @@ export function AgentTab(props: AgentTabProps) {
               </tbody>
             </table>
           ) : (
-            <div className="empty">No agent data available. Deploy an agent or start the backend.</div>
+            <div className="empty">Deploy an agent above, or start the backend indexer to see metrics.</div>
           )}
         </div>
       </div>

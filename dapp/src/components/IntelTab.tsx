@@ -60,7 +60,7 @@ export function IntelTab(props: IntelTabProps) {
         <div className="panel">
           <div className="panel__header">Recent Proposals</div>
           {props.proposals.length === 0 ? (
-            <div className="empty">No proposals indexed yet.</div>
+            <div className="empty">No proposals indexed yet. Create a proposal in the Governance tab, or start the backend indexer.</div>
           ) : (
             <table className="data-table">
               <thead>
@@ -89,7 +89,7 @@ export function IntelTab(props: IntelTabProps) {
         <div className="panel">
           <div className="panel__header">Audit Log</div>
           {props.auditLog.length === 0 ? (
-            <div className="empty">No audit entries recorded.</div>
+            <div className="empty">Audit entries appear here after proposals are executed.</div>
           ) : (
             <table className="data-table">
               <thead>

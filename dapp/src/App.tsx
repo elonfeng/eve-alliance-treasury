@@ -103,6 +103,13 @@ function App() {
 
   useEffect(() => { fetchBackendData(); }, [fetchBackendData]);
 
+  useEffect(() => {
+    if (status) {
+      const timer = setTimeout(() => setStatus(""), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
+
   // ── Transaction helper ─────────────────────────────────────────────
 
   const exec = async (tx: Transaction, label: string) => {
