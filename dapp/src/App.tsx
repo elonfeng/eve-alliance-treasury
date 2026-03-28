@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useConnection } from "@evefrontier/dapp-kit";
-import { useCurrentAccount } from "@mysten/dapp-kit-react";
+import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
-import { bcs } from "@mysten/sui/bcs";
-import { getWallets } from "@mysten/wallet-standard";
 
 import { HudBar } from "./components/HudBar";
 import { SetupTab } from "./components/SetupTab";
@@ -29,6 +27,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 function App() {
   const { handleConnect, handleDisconnect } = useConnection();
+  const { signAndExecuteTransaction } = useDAppKit();
   const account = useCurrentAccount();
 
   const [activeTab, setActiveTab] = useState<Tab>("setup");
@@ -117,28 +116,7 @@ function App() {
   const exec = async (tx: Transaction, label: string) => {
     setStatus(`${label}...`);
     try {
-      if (!account) throw new Error("Wallet not connected");
-      // Get RAW wallet from wallet-standard registry (not dapp-kit wrapped)
-      const rawWallets = getWallets().get();
-      const wallet = rawWallets.find((w: any) => w.name === "Eve Vault") || rawWallets[0];
-      if (!wallet) throw new Error("No wallet found");
-      const features = wallet.features as any;
-      let result: any;
-      if (features["sui:signAndExecuteTransaction"]) {
-        result = await features["sui:signAndExecuteTransaction"].signAndExecuteTransaction({
-          transaction: tx,
-          account: account as any,
-          chain: "sui:testnet",
-        });
-      } else if (features["sui:signAndExecuteTransactionBlock"]) {
-        result = await features["sui:signAndExecuteTransactionBlock"].signAndExecuteTransactionBlock({
-          transactionBlock: tx,
-          account: account as any,
-          chain: "sui:testnet",
-        });
-      } else {
-        throw new Error("Wallet does not support transaction signing");
-      }
+      const result: any = await signAndExecuteTransaction({ transaction: tx });
       setLastTxDigest(result?.digest || "");
       setStatus(`${label} succeeded`);
       return result;
@@ -154,7 +132,7 @@ function App() {
 
   const createTreasury = async () => {
     const tx = new Transaction();
-    tx.moveCall({ target: target("treasury", "create_treasury"), arguments: [tx.pure(bcs.string().serialize(allianceName).toBytes())] });
+    tx.moveCall({ target: target("treasury", "create_treasury"), arguments: [tx.pure.string(allianceName)] });
     const res: any = await exec(tx, "Create Treasury");
     if (res?.objectChanges) {
       const t = res.objectChanges.find((c: any) => c.type === "created" && c.objectType?.includes("AllianceTreasury"));
@@ -182,7 +160,7 @@ function App() {
     const tx = new Transaction();
     tx.moveCall({
       target: target("roles", "add_member"),
-      arguments: [tx.object(registryId), tx.object(adminCapId), tx.pure(bcs.Address.serialize(memberAddr).toBytes()), tx.pure(bcs.u8().serialize(Number(memberRole)).toBytes())],
+      arguments: [tx.object(registryId), tx.object(adminCapId), tx.pure.address(memberAddr), tx.pure.u8(Number(memberRole))],
     });
     await exec(tx, "Add Member");
   };
@@ -201,9 +179,9 @@ function App() {
     tx.moveCall({
       target: target("proposal", "create_proposal"),
       arguments: [
-        tx.object(treasuryId), tx.object(registryId), tx.pure(bcs.u64().serialize(amountMist).toBytes()),
-        tx.pure(bcs.Address.serialize(proposalRecipient || account!.address).toBytes()),
-        tx.pure(bcs.string().serialize(proposalPurpose).toBytes()), tx.object("0x6"),
+        tx.object(treasuryId), tx.object(registryId), tx.pure.u64(amountMist),
+        tx.pure.address(proposalRecipient || account!.address),
+        tx.pure.string(proposalPurpose), tx.object("0x6"),
       ],
     });
     const res: any = await exec(tx, "Create Proposal");
