@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useConnection } from "@evefrontier/dapp-kit";
-import { useCurrentAccount, useCurrentWallet } from "@mysten/dapp-kit-react";
+import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
 
 import { HudBar } from "./components/HudBar";
@@ -27,7 +27,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 function App() {
   const { handleConnect, handleDisconnect } = useConnection();
-  const wallet = useCurrentWallet();
+  const { signAndExecuteTransaction } = useDAppKit();
   const account = useCurrentAccount();
 
   const [activeTab, setActiveTab] = useState<Tab>("setup");
@@ -64,7 +64,7 @@ function App() {
   // Backend state
   interface BackendProposal { id: string; purpose: string; amount: string; status: string; created_at: string; }
   interface AuditEntry { proposal_id: string; purpose: string; proposer: string; recipient: string; amount: string; executor: string; executed_at: string; }
-  interface AgentStats { proposals: number; payouts: number; signatures: number; killmails: number; jumps: number; }
+  interface AgentStats { proposals: { total: number; pending: number; executed: number; expired: number }; payouts: { count: number; total_amount_mist: string }; signatures: number; killmails: number; jumps: number; }
   interface KillMail { killer_id: string; victim_id: string; loss_type: string; kill_timestamp: string; }
 
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
@@ -73,6 +73,14 @@ function App() {
   const [agentStats, setAgentStats] = useState<AgentStats | null>(null);
   const [killMails, setKillMails] = useState<KillMail[]>([]);
   const [backendLoading, setBackendLoading] = useState(false);
+
+  // Auto-dismiss status
+  useEffect(() => {
+    if (status) {
+      const timer = setTimeout(() => setStatus(""), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [status]);
 
   // ── Backend fetch ──────────────────────────────────────────────────
 
@@ -103,41 +111,21 @@ function App() {
 
   useEffect(() => { fetchBackendData(); }, [fetchBackendData]);
 
-  useEffect(() => {
-    if (status) {
-      const timer = setTimeout(() => setStatus(""), 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [status]);
-
   // ── Transaction helper ─────────────────────────────────────────────
 
   const exec = async (tx: Transaction, label: string) => {
     setStatus(`${label}...`);
     try {
-      if (!wallet || !account) throw new Error("Wallet not connected");
-      let result: any;
-      const features = wallet.features as any;
-      if (features['sui:signAndExecuteTransaction']) {
-        result = await features['sui:signAndExecuteTransaction'].signAndExecuteTransaction({
-          transaction: tx,
-          account: account as any,
-          chain: 'sui:testnet',
-        });
-      } else if (features['sui:signAndExecuteTransactionBlock']) {
-        result = await features['sui:signAndExecuteTransactionBlock'].signAndExecuteTransactionBlock({
-          transactionBlock: tx,
-          account: account as any,
-          chain: 'sui:testnet',
-        });
-      } else {
-        throw new Error("Wallet does not support transaction signing");
-      }
+      const result: any = await signAndExecuteTransaction({
+        transaction: tx as any,
+      });
       setLastTxDigest(result?.digest || "");
       setStatus(`${label} succeeded`);
       return result;
     } catch (e: any) {
-      setStatus(`${label} failed: ${e.message?.slice(0, 100)}`);
+      const msg = e?.message || String(e);
+      setStatus(`${label} failed: ${msg.slice(0, 120)}`);
+      console.error(`${label} error:`, e);
       return null;
     }
   };
@@ -153,6 +141,10 @@ function App() {
       const c = res.objectChanges.find((c: any) => c.type === "created" && c.objectType?.includes("AdminCap"));
       if (t) setTreasuryId(t.objectId);
       if (c) setAdminCapId(c.objectId);
+    }
+    // Try parsing from effects if objectChanges not available
+    if (res?.effects && !res?.objectChanges) {
+      setStatus("Create Treasury succeeded (check explorer for object IDs)");
     }
   };
 
@@ -274,7 +266,6 @@ function App() {
         </div>
       ) : (
         <>
-          {/* Tab nav */}
           <nav className="tab-nav">
             {TABS.map((tab) => (
               <button
@@ -287,7 +278,6 @@ function App() {
             ))}
           </nav>
 
-          {/* Tab content */}
           {activeTab === "setup" && (
             <SetupTab
               treasuryId={treasuryId} adminCapId={adminCapId} registryId={registryId}

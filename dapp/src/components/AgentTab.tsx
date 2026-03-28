@@ -1,6 +1,6 @@
 interface AgentStats {
-  proposals: number;
-  payouts: number;
+  proposals: { total: number; pending: number; executed: number; expired: number };
+  payouts: { count: number; total_amount_mist: string };
   signatures: number;
   killmails: number;
   jumps: number;
@@ -124,15 +124,21 @@ export function AgentTab(props: AgentTabProps) {
             <table className="data-table">
               <tbody>
                 <tr>
-                  <td style={{ color: 'var(--text-muted)' }}>Proposals Indexed</td>
+                  <td style={{ color: 'var(--text-muted)' }}>Proposals</td>
                   <td style={{ textAlign: 'right' }}>
-                    <span className="tag tag--cyan">{props.agentStats.proposals}</span>
+                    <span className="tag tag--cyan">{props.agentStats.proposals.total}</span>
+                    {' '}<span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      ({props.agentStats.proposals.pending} pending, {props.agentStats.proposals.executed} executed)
+                    </span>
                   </td>
                 </tr>
                 <tr>
-                  <td style={{ color: 'var(--text-muted)' }}>Payouts Executed</td>
+                  <td style={{ color: 'var(--text-muted)' }}>Payouts</td>
                   <td style={{ textAlign: 'right' }}>
-                    <span className="tag tag--green">{props.agentStats.payouts}</span>
+                    <span className="tag tag--green">{props.agentStats.payouts.count}</span>
+                    {' '}<span style={{ fontSize: '10px', color: 'var(--text-muted)' }}>
+                      ({(Number(props.agentStats.payouts.total_amount_mist) / 1e9).toFixed(3)} SUI)
+                    </span>
                   </td>
                 </tr>
                 <tr>
