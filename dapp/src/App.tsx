@@ -63,7 +63,7 @@ function App() {
 
   // Backend state
   interface BackendProposal { id: string; purpose: string; amount: number; status: string; created_at: string; }
-  interface AuditEntry { action: string; actor: string; timestamp: string; details: string; }
+  interface AuditEntry { proposal_id: string; purpose: string; proposer: string; recipient: string; amount: string; executor: string; executed_at: string; }
   interface AgentStats { total_auto_signed: number; daily_spent: number; daily_limit: number; max_auto_amount: number; skills: string[]; }
   interface KillMail { killer: string; victim: string; timestamp: string; }
 

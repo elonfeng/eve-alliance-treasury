@@ -7,10 +7,13 @@ interface BackendProposal {
 }
 
 interface AuditEntry {
-  action: string;
-  actor: string;
-  timestamp: string;
-  details: string;
+  proposal_id: string;
+  purpose: string;
+  proposer: string;
+  recipient: string;
+  amount: string;
+  executor: string;
+  executed_at: string;
 }
 
 interface KillMail {
@@ -94,17 +97,19 @@ export function IntelTab(props: IntelTabProps) {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Action</th>
-                  <th>Actor</th>
+                  <th>Purpose</th>
+                  <th>Proposer</th>
+                  <th>Amount</th>
                   <th>Time</th>
                 </tr>
               </thead>
               <tbody>
                 {props.auditLog.map((e, i) => (
                   <tr key={i}>
-                    <td><span className="tag tag--muted">{e.action}</span></td>
-                    <td style={{ fontSize: '11px' }}>{e.actor.slice(0, 8)}...</td>
-                    <td style={{ fontSize: '11px' }}>{e.timestamp}</td>
+                    <td>{e.purpose}</td>
+                    <td style={{ fontSize: '11px' }}>{e.proposer?.slice(0, 8) || '—'}...</td>
+                    <td>{(Number(e.amount) / 1e9).toFixed(3)} SUI</td>
+                    <td style={{ fontSize: '11px' }}>{e.executed_at?.slice(0, 10) || '—'}</td>
                   </tr>
                 ))}
               </tbody>
