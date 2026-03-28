@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useConnection } from "@evefrontier/dapp-kit";
-import { useCurrentAccount, useDAppKit } from "@mysten/dapp-kit-react";
+import { useCurrentAccount, useWallets } from "@mysten/dapp-kit-react";
 import { Transaction } from "@mysten/sui/transactions";
 import { bcs } from "@mysten/sui/bcs";
 
@@ -28,7 +28,7 @@ const TABS: { id: Tab; label: string }[] = [
 
 function App() {
   const { handleConnect, handleDisconnect } = useConnection();
-  const { signAndExecuteTransaction } = useDAppKit();
+  const wallets = useWallets();
   const account = useCurrentAccount();
 
   const [activeTab, setActiveTab] = useState<Tab>("setup");
@@ -118,7 +118,26 @@ function App() {
     setStatus(`${label}...`);
     try {
       if (!account) throw new Error("Wallet not connected");
-      const result: any = await signAndExecuteTransaction({ transaction: tx as any });
+      // Find the connected wallet via wallet-standard (bypass dapp-kit wrapper)
+      const wallet = wallets.find((w: any) => w.name === "Eve Vault") || wallets[0];
+      if (!wallet) throw new Error("No wallet found");
+      const features = wallet.features as any;
+      let result: any;
+      if (features["sui:signAndExecuteTransaction"]) {
+        result = await features["sui:signAndExecuteTransaction"].signAndExecuteTransaction({
+          transaction: tx,
+          account: account as any,
+          chain: "sui:testnet",
+        });
+      } else if (features["sui:signAndExecuteTransactionBlock"]) {
+        result = await features["sui:signAndExecuteTransactionBlock"].signAndExecuteTransactionBlock({
+          transactionBlock: tx,
+          account: account as any,
+          chain: "sui:testnet",
+        });
+      } else {
+        throw new Error("Wallet does not support transaction signing");
+      }
       setLastTxDigest(result?.digest || "");
       setStatus(`${label} succeeded`);
       return result;
