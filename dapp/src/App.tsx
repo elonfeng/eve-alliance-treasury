@@ -116,8 +116,11 @@ function App() {
   const exec = async (tx: Transaction, label: string) => {
     setStatus(`${label}...`);
     try {
+      if (!account) throw new Error("Wallet not connected");
+      // Serialize to JSON string first, then wrap — avoids version mismatch with EVE Vault
+      const jsonStr = await tx.toJSON();
       const result: any = await signAndExecuteTransaction({
-        transaction: tx as any,
+        transaction: jsonStr as any,
       });
       setLastTxDigest(result?.digest || "");
       setStatus(`${label} succeeded`);
